@@ -9,7 +9,7 @@ app = Flask(__name__)
 def generate_intake():
     try:
         data = request.get_json()
-        print("Received request:", data)
+        print("Session ID:", data.get("session_id"))
 
         session_id = data['session_id']
         email = data['email']
