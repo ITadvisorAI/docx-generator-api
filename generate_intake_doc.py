@@ -25,7 +25,9 @@ def generate_intake():
 
     for category in intake["selected_categories"]:
         doc.add_paragraph(category, style="ListBullet")
-        for program in intake["selected_programs"].get(category, []):
+        programs = intake.get("selected_programs", {}).get(category, [])
+for program in programs:
+    doc.add_paragraph(f"  - {program}", style="ListBullet2")
             doc.add_paragraph(f"  - {program}", style="ListBullet2")
 
     doc.add_heading("Transformation Questions", level=1)
