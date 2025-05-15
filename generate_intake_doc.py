@@ -2,33 +2,18 @@ from flask import Flask, request, jsonify
 from docx import Document
 import os
 import shutil
+from threading import Thread
 
 app = Flask(__name__)
 
-@app.route('/generate_intake', methods=['POST'])
-def generate_intake():
+def process_intake_document(data):
     try:
-        # Print raw request data
-        raw = request.data.decode("utf-8")
-        print("📦 RAW REQUEST BODY:")
-        print(raw)
-
-        # Attempt to parse JSON
-        data = request.get_json(force=True)
-        print("✅ Parsed JSON:")
-        print(data)
-
-        # Extract fields
         session_id = data.get('session_id')
         email = data.get('email')
         intake = data.get('intake_answers', {})
         files = data.get('files', [])
 
-        if not session_id or not email or not intake:
-            print("❌ Missing one or more required fields.")
-            return jsonify({
-                "error": "Missing required fields: session_id, email, or intake_answers"
-            }), 400
+        print(f"🛠️ Processing intake document for session: {session_id}")
 
         # Create folder path
         folder_path = os.path.join("temp_sessions", f"Temp_{session_id}")
@@ -40,7 +25,7 @@ def generate_intake():
 
         if not os.path.exists(template_path):
             print("❌ intakeform.docx template not found.")
-            return jsonify({"error": "Missing intakeform.docx template."}), 500
+            return
 
         shutil.copy(template_path, output_file)
 
@@ -75,19 +60,47 @@ def generate_intake():
                 doc.add_paragraph(f"URL: {url}", style="Normal")
 
         doc.save(output_file)
-
-        file_url = f"https://docx-generator-api.onrender.com/files/Temp_{session_id}/intake_{session_id}.docx"
-        print("✅ Intake document generated and saved successfully.")
-        print(f"📄 File URL: {file_url}")
-
-        return jsonify({
-            "session_id": session_id,
-            "file_name": f"intake_{session_id}.docx",
-            "file_url": file_url
-        })
+        print(f"✅ Document saved for session: {session_id}")
+        print(f"📄 File URL: https://docx-generator-api.onrender.com/files/Temp_{session_id}/intake_{session_id}.docx")
 
     except Exception as e:
-        print("❌ Exception occurred in /generate_intake:")
+        print("❌ Error during background processing:")
+        print(str(e))
+
+
+@app.route('/generate_intake', methods=['POST'])
+def generate_intake():
+    try:
+        raw = request.data.decode("utf-8")
+        print("📦 RAW REQUEST BODY:")
+        print(raw)
+
+        data = request.get_json(force=True)
+        print("✅ Parsed JSON:")
+        print(data)
+
+        session_id = data.get('session_id')
+        email = data.get('email')
+        intake = data.get('intake_answers', {})
+
+        if not session_id or not email or not intake:
+            return jsonify({
+                "error": "Missing required fields: session_id, email, or intake_answers"
+            }), 400
+
+        # Start background document generation
+        Thread(target=process_intake_document, args=(data,)).start()
+
+        # Respond immediately to avoid timeout
+        return jsonify({
+            "status": "processing",
+            "session_id": session_id,
+            "file_name": f"intake_{session_id}.docx",
+            "file_url": f"https://docx-generator-api.onrender.com/files/Temp_{session_id}/intake_{session_id}.docx"
+        }), 202
+
+    except Exception as e:
+        print("❌ Exception in /generate_intake:")
         print(str(e))
         return jsonify({"error": "Internal server error", "details": str(e)}), 500
 
