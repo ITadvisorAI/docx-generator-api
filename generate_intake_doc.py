@@ -54,8 +54,12 @@ def process_intake_document(data):
 
         for category in selected_categories:
             doc.add_paragraph(category, style="ListBullet")
-            for program in selected_programs.get(category, []):
-                doc.add_paragraph(f"  - {program}", style="ListBullet2")
+            programs = selected_programs.get(category, [])
+            if not programs:
+                doc.add_paragraph("  - No specific programs selected", style="ListBullet2")
+            else:
+                for program in programs:
+                    doc.add_paragraph(f"  - {program}", style="ListBullet2")
 
         doc.add_heading("Transformation Questions", level=1)
         doc.add_paragraph(f"1. {intake.get('q1', '')}")
