@@ -16,7 +16,7 @@ def sanitize_session_id(session_id):
 # ✅ Background thread for document generation
 def process_intake_document(data):
     try:
-        print("🧪 Starting background processing thread...")
+        print("🚀 Thread started: processing intake document")
 
         session_id = data.get('session_id')
         if not session_id:
@@ -33,9 +33,12 @@ def process_intake_document(data):
         os.makedirs(folder_path, exist_ok=True)
         print(f"📁 Folder created or exists: {folder_path}")
 
-        template_path = "intakeform.docx"
+        # Resolve absolute path to template
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        template_path = os.path.join(script_dir, "intakeform.docx")
         output_file = os.path.join(folder_path, f"intake_{safe_session_id}.docx")
 
+        print(f"🔍 Looking for template at: {template_path}")
         if not os.path.exists(template_path):
             print(f"❌ Template file missing: {template_path}")
             return
@@ -99,9 +102,11 @@ def generate_intake():
                 "error": "Missing session_id, email, or intake_answers"
             }), 400
 
-        safe_session_id = sanitize_session_id(session_id)
+        print("🧵 Launching background thread...")
         Thread(target=process_intake_document, args=(data,)).start()
+        print("✅ Background thread launched")
 
+        safe_session_id = sanitize_session_id(session_id)
         return jsonify({
             "status": "processing",
             "session_id": session_id,
