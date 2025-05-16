@@ -4,6 +4,7 @@ import os
 import shutil
 from threading import Thread
 import re
+import requests  # 🔁 Needed for the new proxy route
 
 app = Flask(__name__)
 
@@ -64,6 +65,7 @@ def process_intake_document(data):
         print(str(e))
 
 
+# ✅ Intake DOCX Generator Route
 @app.route('/generate_intake', methods=['POST'])
 def generate_intake():
     try:
@@ -85,7 +87,6 @@ def generate_intake():
                 "error": "Missing session_id, email, or intake_answers"
             }), 400
 
-        # Start DOCX generation thread
         Thread(target=process_intake_document, args=(data,)).start()
 
         return jsonify({
@@ -100,7 +101,8 @@ def generate_intake():
         print(str(e))
         return jsonify({"error": "Internal server error", "details": str(e)}), 500
 
-# ✅ Route to serve files from temp_sessions
+
+# ✅ Route to serve generated DOCX files
 @app.route('/files/<path:filename>', methods=['GET'])
 def serve_generated_file(filename):
     try:
@@ -117,6 +119,31 @@ def serve_generated_file(filename):
     except Exception as e:
         print(f"❌ Error in /files: {str(e)}")
         abort(500)
+
+
+# ✅ NEW: Proxy route to trigger Make.com webhook
+@app.route('/start_session', methods=['POST'])
+def start_session():
+    try:
+        data = request.get_json(force=True)
+        print("📩 Received session start request:")
+        print(data)
+
+        make_webhook = 'https://hook.us2.make.com/1ivi9q9x6l253tikb557hemgtl7n2bv9'
+
+        r = requests.post(make_webhook, json=data)
+
+        if r.status_code == 200:
+            print("✅ Session initiated via Make.com")
+            return jsonify({"message": "Session initiated via proxy"}), 200
+        else:
+            print(f"❌ Failed to POST to Make.com: {r.status_code}")
+            return jsonify({"error": "Make webhook failed", "status": r.status_code}), r.status_code
+
+    except Exception as e:
+        print(f"❌ Exception in /start_session: {str(e)}")
+        return jsonify({"error": "Internal server error", "details": str(e)}), 500
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
