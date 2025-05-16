@@ -1,3 +1,8 @@
+@app.route('/generate_intake', methods=['POST'])
+def generate_intake():
+    try:
+        print("📥 /generate_intake endpoint called")
+        ...
 from flask import Flask, request, jsonify, send_from_directory, abort
 from docx import Document
 import os
