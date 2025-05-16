@@ -5,6 +5,7 @@ import shutil
 from threading import Thread
 import re
 import requests
+import traceback
 
 app = Flask(__name__)
 
@@ -12,28 +13,36 @@ app = Flask(__name__)
 def sanitize_session_id(session_id):
     return re.sub(r"[^\w\-]", "_", session_id)
 
-
 # ✅ Background thread for document generation
 def process_intake_document(data):
     try:
+        print("🧪 Starting background processing thread...")
+
         session_id = data.get('session_id')
+        if not session_id:
+            print("❌ Missing session_id in data.")
+            return
+
         safe_session_id = sanitize_session_id(session_id)
         intake = data.get('intake_answers', {})
         files = data.get('files', [])
 
-        print(f"🛠️ Processing DOCX for session: {session_id} → {safe_session_id}")
+        print(f"🛠️ Generating DOCX for session: {session_id} → {safe_session_id}")
 
         folder_path = os.path.join("temp_sessions", f"Temp_{safe_session_id}")
         os.makedirs(folder_path, exist_ok=True)
+        print(f"📁 Folder created or exists: {folder_path}")
 
         template_path = "intakeform.docx"
         output_file = os.path.join(folder_path, f"intake_{safe_session_id}.docx")
 
         if not os.path.exists(template_path):
-            print("❌ intakeform.docx not found.")
+            print(f"❌ Template file missing: {template_path}")
             return
 
         shutil.copy(template_path, output_file)
+        print(f"📄 Template copied to: {output_file}")
+
         doc = Document(output_file)
 
         doc.add_heading("Selected Programs", level=1)
@@ -59,12 +68,12 @@ def process_intake_document(data):
                 doc.add_paragraph(f"URL: {f.get('url', '')}", style="Normal")
 
         doc.save(output_file)
-        print(f"✅ DOCX saved: {output_file}")
+        print(f"✅ DOCX successfully saved: {output_file}")
+        print(f"🔗 Public URL: /files/Temp_{safe_session_id}/intake_{safe_session_id}.docx")
 
     except Exception as e:
-        print("❌ Error in background processing:")
-        print(str(e))
-
+        print("❌ Exception in process_intake_document:")
+        traceback.print_exc()
 
 # ✅ Intake DOCX Generator Route
 @app.route('/generate_intake', methods=['POST'])
@@ -79,15 +88,16 @@ def generate_intake():
         print(data)
 
         session_id = data.get('session_id')
-        safe_session_id = sanitize_session_id(session_id)
         email = data.get('email')
         intake = data.get('intake_answers', {})
 
         if not session_id or not email or not intake:
+            print("❌ Missing required fields in request.")
             return jsonify({
                 "error": "Missing session_id, email, or intake_answers"
             }), 400
 
+        safe_session_id = sanitize_session_id(session_id)
         Thread(target=process_intake_document, args=(data,)).start()
 
         return jsonify({
@@ -99,9 +109,8 @@ def generate_intake():
 
     except Exception as e:
         print("❌ Exception in /generate_intake:")
-        print(str(e))
+        traceback.print_exc()
         return jsonify({"error": "Internal server error", "details": str(e)}), 500
-
 
 # ✅ Route to serve generated DOCX files
 @app.route('/files/<path:filename>', methods=['GET'])
@@ -111,16 +120,16 @@ def serve_generated_file(filename):
         full_path = os.path.join(directory, filename)
 
         if not os.path.isfile(full_path):
-            print(f"❌ Not found: {full_path}")
+            print(f"❌ File not found: {full_path}")
             abort(404)
 
         print(f"📤 Serving file: {full_path}")
         return send_from_directory(directory, filename, as_attachment=False)
 
     except Exception as e:
-        print(f"❌ Error in /files: {str(e)}")
+        print(f"❌ Exception in /files route:")
+        traceback.print_exc()
         abort(500)
-
 
 # ✅ Proxy route to forward email to Make.com webhook
 @app.route('/start_session', methods=['POST'])
@@ -135,21 +144,20 @@ def start_session():
 
         if r.status_code == 200:
             print("✅ Session initiated via Make.com")
-            return jsonify({"message": "Session initiated via proxy"}), 200
+            return jsonify({"message": "Session started"}), 200
         else:
             print(f"❌ Failed to POST to Make.com: {r.status_code}")
             return jsonify({"error": "Make webhook failed", "status": r.status_code}), r.status_code
 
     except Exception as e:
-        print(f"❌ Exception in /start_session: {str(e)}")
+        print("❌ Exception in /start_session:")
+        traceback.print_exc()
         return jsonify({"error": "Internal server error", "details": str(e)}), 500
-
 
 # ✅ Health check endpoint
 @app.route('/healthz', methods=['GET'])
 def health_check():
     return "ok", 200
-
 
 # ✅ Run app (Render will assign dynamic port via $PORT env var)
 if __name__ == "__main__":
