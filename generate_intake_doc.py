@@ -118,11 +118,14 @@ def generate_intake():
         print("✅ Background thread launched")
 
         safe_session_id = sanitize_session_id(session_id)
+        file_name = f"intake_{safe_session_id}.docx"
+        file_url = f"https://docx-generator-api.onrender.com/files/Temp_{safe_session_id}/{file_name}"
+
         return jsonify({
             "status": "processing",
             "session_id": session_id,
-            "file_name": f"intake_{safe_session_id}.docx",
-            "file_url": f"https://docx-generator-api.onrender.com/files/Temp_{safe_session_id}/intake_{safe_session_id}.docx"
+            "file_name": file_name,
+            "file_url": file_url
         }), 202
 
     except Exception as e:
