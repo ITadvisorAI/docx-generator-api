@@ -6,6 +6,9 @@ from threading import Thread
 import re
 import requests
 import traceback
+import json
+
+print("🚀 Flask is starting...")  # Confirms app is initializing
 
 app = Flask(__name__)
 
@@ -33,7 +36,15 @@ def process_intake_document(data):
         os.makedirs(folder_path, exist_ok=True)
         print(f"📁 Folder created or exists: {folder_path}")
 
-        # Resolve absolute path to template
+        # Save a debug snapshot of inputs
+        try:
+            with open(os.path.join(folder_path, "debug.json"), "w") as f:
+                json.dump(data, f, indent=2)
+            print("📝 Saved debug input JSON")
+        except Exception as debug_error:
+            print("⚠️ Failed to save debug input:", debug_error)
+
+        # Get absolute template path
         script_dir = os.path.dirname(os.path.abspath(__file__))
         template_path = os.path.join(script_dir, "intakeform.docx")
         output_file = os.path.join(folder_path, f"intake_{safe_session_id}.docx")
@@ -54,12 +65,8 @@ def process_intake_document(data):
 
         for category in selected_categories:
             doc.add_paragraph(category, style="ListBullet")
-            programs = selected_programs.get(category, [])
-            if not programs:
-                doc.add_paragraph("  - No specific programs selected", style="ListBullet2")
-            else:
-                for program in programs:
-                    doc.add_paragraph(f"  - {program}", style="ListBullet2")
+            for program in selected_programs.get(category, []):
+                doc.add_paragraph(f"  - {program}", style="ListBullet2")
 
         doc.add_heading("Transformation Questions", level=1)
         doc.add_paragraph(f"1. {intake.get('q1', '')}")
@@ -86,7 +93,7 @@ def process_intake_document(data):
 @app.route('/generate_intake', methods=['POST'])
 def generate_intake():
     try:
-        print("📥 /generate_intake endpoint called")
+        print("📥 /generate_intake endpoint STARTED")
 
         raw = request.data.decode("utf-8")
         print("📦 RAW REQUEST:")
@@ -106,7 +113,7 @@ def generate_intake():
                 "error": "Missing session_id, email, or intake_answers"
             }), 400
 
-        print("🧵 Launching background thread...")
+        print(f"🧵 Launching background thread for session: {session_id}")
         Thread(target=process_intake_document, args=(data,)).start()
         print("✅ Background thread launched")
 
