@@ -8,35 +8,33 @@ import requests
 import traceback
 import json
 
-print("🚀 Flask is starting...")  # Confirms app is initializing
+print("🚀 Flask is starting...")
 
 app = Flask(__name__)
 
-# ✅ Sanitize session_id to make file paths safe
+# ✅ Sanitize session_id for folder paths
 def sanitize_session_id(session_id):
     return re.sub(r"[^\w\-]", "_", session_id)
 
+# ✅ Safe filename from email
+def clean_email_for_filename(email):
+    return email.replace("@", "_at_").replace(".", "_dot_")
+
 # ✅ Background thread for document generation
-def process_intake_document(data):
+def process_intake_document(data, file_name, output_path):
     try:
         print("🚀 Thread started: processing intake document")
 
         session_id = data.get('session_id')
-        if not session_id:
-            print("❌ Missing session_id in data.")
-            return
-
-        safe_session_id = sanitize_session_id(session_id)
         intake = data.get('intake_answers', {})
         files = data.get('files', [])
 
-        print(f"🛠️ Generating DOCX for session: {session_id} → {safe_session_id}")
-
+        safe_session_id = sanitize_session_id(session_id)
         folder_path = os.path.join("temp_sessions", f"Temp_{safe_session_id}")
         os.makedirs(folder_path, exist_ok=True)
         print(f"📁 Folder created or exists: {folder_path}")
 
-        # Save a debug snapshot of inputs
+        # Save debug snapshot
         try:
             with open(os.path.join(folder_path, "debug.json"), "w") as f:
                 json.dump(data, f, indent=2)
@@ -44,20 +42,18 @@ def process_intake_document(data):
         except Exception as debug_error:
             print("⚠️ Failed to save debug input:", debug_error)
 
-        # Get absolute template path
+        # Load and copy template
         script_dir = os.path.dirname(os.path.abspath(__file__))
         template_path = os.path.join(script_dir, "intakeform.docx")
-        output_file = os.path.join(folder_path, f"intake_{safe_session_id}.docx")
-
         print(f"🔍 Looking for template at: {template_path}")
         if not os.path.exists(template_path):
             print(f"❌ Template file missing: {template_path}")
             return
 
-        shutil.copy(template_path, output_file)
-        print(f"📄 Template copied to: {output_file}")
+        shutil.copy(template_path, output_path)
+        print(f"📄 Template copied to: {output_path}")
 
-        doc = Document(output_file)
+        doc = Document(output_path)
 
         doc.add_heading("Selected Programs", level=1)
         selected_categories = intake.get("selected_categories", [])
@@ -81,9 +77,8 @@ def process_intake_document(data):
                 doc.add_paragraph(f"{f.get('name', 'Unknown')} ({f.get('type', '')})", style="ListBullet")
                 doc.add_paragraph(f"URL: {f.get('url', '')}", style="Normal")
 
-        doc.save(output_file)
-        print(f"✅ DOCX successfully saved: {output_file}")
-        print(f"🔗 Public URL: /files/Temp_{safe_session_id}/intake_{safe_session_id}.docx")
+        doc.save(output_path)
+        print(f"✅ DOCX successfully saved: {output_path}")
 
     except Exception as e:
         print("❌ Exception in process_intake_document:")
@@ -113,13 +108,14 @@ def generate_intake():
                 "error": "Missing session_id, email, or intake_answers"
             }), 400
 
-        print(f"🧵 Launching background thread for session: {session_id}")
-        Thread(target=process_intake_document, args=(data,)).start()
-        print("✅ Background thread launched")
-
         safe_session_id = sanitize_session_id(session_id)
-        file_name = f"intake_{safe_session_id}.docx"
+        email_id = clean_email_for_filename(email)
+        file_name = f"intake_{sanitize_session_id(session_id)}_{email_id}.docx"
         file_url = f"https://docx-generator-api.onrender.com/files/Temp_{safe_session_id}/{file_name}"
+        output_path = os.path.join("temp_sessions", f"Temp_{safe_session_id}", file_name)
+
+        print(f"🧵 Launching background thread for file: {file_name}")
+        Thread(target=process_intake_document, args=(data, file_name, output_path)).start()
 
         return jsonify({
             "status": "processing",
