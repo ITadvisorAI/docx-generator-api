@@ -1,16 +1,23 @@
 # 📄 DOCX Generator API – IT Transformation Advisor
 
-This Flask-based microservice generates personalized DOCX intake reports based on structured JSON input. It is part of the IT Transformation Advisor automation system and integrates with Make.com and OpenAI GPTs.
+This microservice is part of the AI-powered **IT Transformation Advisor** system. It generates:
+
+- A detailed **infrastructure assessment report** in DOCX
+- An executive summary **PowerPoint deck (PPTX)**
+
+These documents are created from structured scoring, recommendations, and findings provided by GPT modules (e.g., GPT2 – it_assessment).
 
 ---
 
 ## 🚀 Features
 
-- Accepts JSON input including email, session ID, answers, and file list
-- Generates a `.docx` report using a Word template (`intakeform.docx`)
-- Saves the generated file in a temp folder by `session_id`
-- Serves the generated file at a public URL
-- Easily deployable to [Render.com](https://render.com)
+- Accepts JSON POST requests via `/generate_assessment`
+- Generates:
+  - 📄 IT_Current_Status_Assessment_Report.docx
+  - 📊 IT_Current_Status_Executive_Report.pptx
+- Saves documents inside session-named folders (`temp_sessions/<session_id>/`)
+- Serves public download links via `/files/<path>`
+- Deployable on [Render](https://render.com)
 
 ---
 
@@ -19,39 +26,23 @@ This Flask-based microservice generates personalized DOCX intake reports based o
 - Python 3.11+
 - Flask
 - python-docx
-- requests
-- gunicorn (for production)
+- python-pptx
+- gunicorn (WSGI server for production)
 
 ---
 
 ## 🛠️ API Endpoints
 
-### `POST /generate_intake`
+### POST `/generate_assessment`
 
-Generate an intake report for a user session.
+Generates both DOCX and PPTX reports from IT scoring and recommendations.
 
-#### Request Body (JSON)
+#### 📤 Request Body (JSON)
 
 ```json
 {
-  "session_id": "Temp_05162025_test.user@example.com",
-  "email": "test.user@example.com",
-  "intake_answers": {
-    "selected_categories": ["Infrastructure Modernization"],
-    "selected_programs": {
-      "Infrastructure Modernization": ["Cloud Strategy"]
-    },
-    "q1": "Primary goal?",
-    "q2": "When will the project start?",
-    "q3": "Optimization target?",
-    "q4": "Preferred platform?",
-    "q5": "Delivery model?"
-  },
-  "files": [
-    {
-      "name": "asset_inventory.csv",
-      "url": "https://...",
-      "type": "asset_inventory"
-    }
-  ]
+  "session_id": "Temp_20250521_user_example_com",
+  "score_summary": "Excellent: 20%, Advanced: 40%, Standard: 30%, Obsolete: 10%",
+  "recommendations": "Decommission Tier 1 servers and migrate Tier 2 workloads to Azure.",
+  "key_findings": "Several critical systems run on unsupported platforms, posing business continuity risks."
 }
