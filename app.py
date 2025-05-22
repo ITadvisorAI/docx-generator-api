@@ -2,6 +2,9 @@ from flask import Flask, request, send_from_directory, jsonify
 import os
 import threading
 import logging
+import json
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
 from generate_assessment import process_assessment
 
 # === Flask App Initialization ===
@@ -17,6 +20,23 @@ ALLOWED_TYPES = {
     "capacity_plan", "compliance_report", "firewall_rules",
     "backup_schedule", "strategy_input", "general"
 }
+
+# === Google Drive Credentials from ENV (Optional)
+if os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON"):
+    try:
+        service_account_info = json.loads(os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON"))
+        creds = service_account.Credentials.from_service_account_info(
+            service_account_info,
+            scopes=["https://www.googleapis.com/auth/drive"]
+        )
+        drive_service = build('drive', 'v3', credentials=creds)
+        logging.info("✅ Google Drive service initialized")
+    except Exception as e:
+        logging.warning(f"⚠️ Failed to initialize Google Drive: {e}")
+        drive_service = None
+else:
+    drive_service = None
+    logging.info("🔕 Google Drive not configured")
 
 # === Health Check ===
 @app.route("/", methods=["GET"])
