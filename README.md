@@ -4,8 +4,7 @@ This microservice is part of the AI-powered **IT Transformation Advisor** system
 
 - A detailed **infrastructure assessment report** in DOCX
 - An executive summary **PowerPoint deck (PPTX)**
-
-These documents are created from structured scoring, recommendations, and findings provided by GPT modules (e.g., GPT2 – it_assessment).
+- Two Excel workbooks (hardware/software gap analysis)
 
 ---
 
@@ -15,6 +14,8 @@ These documents are created from structured scoring, recommendations, and findin
 - Generates:
   - 📄 IT_Current_Status_Assessment_Report.docx
   - 📊 IT_Current_Status_Executive_Report.pptx
+  - 📈 HWGapAnalysis_<session_id>.xlsx
+  - 📈 SWGapAnalysis_<session_id>.xlsx
 - Saves documents inside session-named folders (`temp_sessions/<session_id>/`)
 - Serves public download links via `/files/<path>`
 - Deployable on [Render](https://render.com)
@@ -27,6 +28,7 @@ These documents are created from structured scoring, recommendations, and findin
 - Flask
 - python-docx
 - python-pptx
+- openpyxl
 - gunicorn (WSGI server for production)
 
 ---
@@ -35,7 +37,7 @@ These documents are created from structured scoring, recommendations, and findin
 
 ### POST `/generate_assessment`
 
-Generates both DOCX and PPTX reports from IT scoring and recommendations.
+Generates DOCX, PPTX, and XLSX outputs from IT scoring and recommendations.
 
 #### 📤 Request Body (JSON)
 
