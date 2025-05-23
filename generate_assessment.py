@@ -1,175 +1,137 @@
-
 import os
-import traceback
-import requests
 import json
-import matplotlib.pyplot as plt
+import traceback
 from docx import Document
 from pptx import Presentation
 from pptx.util import Inches
-from openpyxl import load_workbook
-from collections import Counter
-
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
-REQUIRED_FILE_TYPES = {"asset_inventory", "gap_working"}
-TEMPLATES = {
-    "hw": "templates/HWGapAnalysis.xlsx",
-    "sw": "templates/SWGapAnalysis.xlsx",
-    "docx": "templates/IT_Current_Status_Assesment_Template.docx",
-    "pptx": "templates/IT_Infrastructure_Assessment_Report.pptx"
-}
-GENERATE_API_URL = "https://docx-generator-api.onrender.com/generate_assessment"
-NEXT_API_URL = "https://market-gap-analysis.onrender.com/start_market_gap"
-
-# === Google Drive Setup (ENV-based) ===
+# === Google Drive Setup ===
 drive_service = None
 try:
-    service_account_json = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
-    if service_account_json:
-        creds = service_account.Credentials.from_service_account_info(
-            json.loads(service_account_json),
-            scopes=["https://www.googleapis.com/auth/drive"]
-        )
-        drive_service = build('drive', 'v3', credentials=creds)
-        print("✅ Google Drive client initialized from ENV")
-    else:
-        print("🔕 Google Drive not configured (ENV missing)")
+    creds_json = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+    if not creds_json:
+        raise ValueError("Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable")
+    creds = service_account.Credentials.from_service_account_info(
+        json.loads(creds_json),
+        scopes=["https://www.googleapis.com/auth/drive"]
+    )
+    drive_service = build("drive", "v3", credentials=creds)
+    print("✅ Google Drive client initialized from ENV")
 except Exception as e:
-    print(f"❌ Failed to init Google Drive: {e}")
+    print(f"❌ Google Drive setup failed: {e}")
+    traceback.print_exc()
 
-def get_drive_folder_id(session_id):
-    query = f"name = '{session_id}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
-    response = drive_service.files().list(q=query, fields="files(id)").execute()
-    folders = response.get("files", [])
-    if not folders:
-        raise FileNotFoundError(f"No folder found in Google Drive for session ID: {session_id}")
-    return folders[0]['id']
-
-def upload_to_drive(file_path, folder_id):
-    if not drive_service or not os.path.exists(file_path):
-        print(f"⚠️ Cannot upload: Drive not initialized or file missing: {file_path}")
+def get_or_create_drive_folder(folder_name):
+    try:
+        query = f"name = '{folder_name}' and mimeType = 'application/vnd.google-apps.folder'"
+        results = drive_service.files().list(q=query, fields="files(id)").execute()
+        folders = results.get("files", [])
+        if folders:
+            return folders[0]["id"]
+        metadata = {
+            "name": folder_name,
+            "mimeType": "application/vnd.google-apps.folder"
+        }
+        folder = drive_service.files().create(body=metadata, fields="id").execute()
+        return folder["id"]
+    except Exception as e:
+        print(f"❌ Failed to get/create folder: {e}")
         return None
-    file_name = os.path.basename(file_path)
-    file_metadata = {'name': file_name, 'parents': [folder_id]}
-    media = MediaFileUpload(file_path, resumable=True)
-    uploaded = drive_service.files().create(body=file_metadata, media_body=media, fields='id, webViewLink').execute()
-    print(f"📤 Uploaded to Google Drive: {uploaded['webViewLink']}")
-    return uploaded['webViewLink']
 
-def generate_tier_chart(ws, output_path):
+def upload_to_drive(file_path, session_id):
     try:
-        tier_col_idx = None
-        headers = [cell.value for cell in next(ws.iter_rows(min_row=1, max_row=1))]
-        for idx, h in enumerate(headers):
-            if h and "tier" in str(h).lower():
-                tier_col_idx = idx
-                break
-        if tier_col_idx is None:
-            print("⚠️ Tier column not found.")
-            return False
-        tiers = [str(row[tier_col_idx]).strip() for row in ws.iter_rows(min_row=2, values_only=True) if row[tier_col_idx]]
-        if not tiers:
-            print("⚠️ No tier values found.")
-            return False
-        from collections import Counter
-        counts = Counter(tiers)
-        plt.figure(figsize=(6, 4))
-        plt.bar(counts.keys(), counts.values(), color='skyblue')
-        plt.title("Tier Distribution")
-        plt.xlabel("Tier")
-        plt.ylabel("Count")
-        plt.tight_layout()
-        plt.savefig(output_path)
-        plt.close()
-        print(f"✅ Tier chart saved to: {output_path}")
-        return True
+        folder_id = get_or_create_drive_folder(session_id)
+        if not folder_id:
+            return None
+        metadata = {
+            "name": os.path.basename(file_path),
+            "parents": [folder_id]
+        }
+        media = MediaFileUpload(file_path, resumable=True)
+        uploaded = drive_service.files().create(
+            body=metadata, media_body=media, fields="id"
+        ).execute()
+        file_id = uploaded["id"]
+        return f"https://drive.google.com/file/d/{file_id}/view"
     except Exception as e:
-        print(f"🔴 Failed to generate chart: {e}")
-        return False
-
-def call_generate_api(session_id, score_summary, recommendations, key_findings):
-    payload = {
-        "session_id": session_id,
-        "score_summary": score_summary,
-        "recommendations": recommendations,
-        "key_findings": key_findings or ""
-    }
-    print(f"📡 Calling docx-generator-api: {GENERATE_API_URL}")
-    try:
-        response = requests.post(GENERATE_API_URL, json=payload)
-        response.raise_for_status()
-        return response.json()
-    except Exception as e:
-        print(f"❌ Generate API error: {e}")
+        print(f"❌ Upload failed: {e}")
         traceback.print_exc()
-        return {}
+        return None
 
-def process_assessment(session_id, email, files, webhook, session_folder):
+def generate_docx(session_id, summary, recommendations, findings, output_path):
     try:
-        print(f"🛠️ Starting document generation for: {session_id}")
-        os.makedirs(session_folder, exist_ok=True)
+        doc = Document()
+        doc.add_heading("IT Assessment Report", level=1)
+        doc.add_paragraph(f"Session ID: {session_id}")
+        doc.add_paragraph("Score Summary:")
+        doc.add_paragraph(summary)
+        doc.add_paragraph("Key Findings:")
+        doc.add_paragraph(findings)
+        doc.add_paragraph("Recommendations:")
+        doc.add_paragraph(recommendations)
+        doc.save(output_path)
+        print(f"📝 DOCX created: {output_path}")
+    except Exception as e:
+        print(f"❌ DOCX generation failed: {e}")
+        traceback.print_exc()
 
-        folder_name = session_id if session_id.startswith("Temp_") else f"Temp_{session_id}"
-        folder_id = get_drive_folder_id(folder_name)
+def generate_pptx(session_id, summary, recommendations, findings, output_path):
+    try:
+        ppt = Presentation()
+        slide1 = ppt.slides.add_slide(ppt.slide_layouts[0])
+        slide1.shapes.title.text = "IT Infrastructure Executive Summary"
+        slide1.placeholders[1].text = f"Session ID: {session_id}"
 
-        for f in files:
-            file_path = os.path.join(session_folder, f["file_name"])
-            response = requests.get(f["file_url"])
-            with open(file_path, "wb") as local_file:
-                local_file.write(response.content)
+        slide2 = ppt.slides.add_slide(ppt.slide_layouts[1])
+        slide2.shapes.title.text = "Score Summary"
+        slide2.placeholders[1].text = summary
 
-        hw_output = os.path.join(session_folder, f"HWGapAnalysis_{session_id}.xlsx")
-        sw_output = os.path.join(session_folder, f"SWGapAnalysis_{session_id}.xlsx")
-        docx_output = os.path.join(session_folder, "IT_Current_Status_Assessment_Report.docx")
-        pptx_output = os.path.join(session_folder, "IT_Current_Status_Executive_Report.pptx")
-        chart_path = os.path.join(session_folder, "tier_distribution.png")
+        slide3 = ppt.slides.add_slide(ppt.slide_layouts[1])
+        slide3.shapes.title.text = "Key Findings"
+        slide3.placeholders[1].text = findings
 
-        # Create Excel reports
-        wb = load_workbook(TEMPLATES["hw"])
-        ws = wb["GAP_Working"] if "GAP_Working" in wb.sheetnames else wb.active
-        generate_tier_chart(ws, chart_path)
-        wb.save(hw_output)
+        slide4 = ppt.slides.add_slide(ppt.slide_layouts[1])
+        slide4.shapes.title.text = "Recommendations"
+        slide4.placeholders[1].text = recommendations
 
-        wb = load_workbook(TEMPLATES["sw"])
-        wb.save(sw_output)
+        ppt.save(output_path)
+        print(f"📊 PPTX created: {output_path}")
+    except Exception as e:
+        print(f"❌ PPTX generation failed: {e}")
+        traceback.print_exc()
 
-        # Generate Word/PPTX
-        result = call_generate_api(session_id,
-            "Excellent: 20%, Advanced: 40%, Standard: 30%, Obsolete: 10%",
-            "Decommission Tier 1 servers and move Tier 2 apps to cloud.",
-            "Critical workloads are on obsolete hardware."
-        )
+def generate_assessment_report(data):
+    try:
+        session_id = data["session_id"]
+        summary = data["score_summary"]
+        recommendations = data["recommendations"]
+        findings = data.get("key_findings", "")
 
-        if 'docx_url' in result:
-            r = requests.get(result['docx_url'])
-            with open(docx_output, 'wb') as f:
-                f.write(r.content)
+        output_folder = os.path.join("temp_sessions", session_id)
+        os.makedirs(output_folder, exist_ok=True)
 
-        if 'pptx_url' in result:
-            r = requests.get(result['pptx_url'])
-            with open(pptx_output, 'wb') as f:
-                f.write(r.content)
+        docx_path = os.path.join(output_folder, "IT_Current_Status_Assessment_Report.docx")
+        pptx_path = os.path.join(output_folder, "IT_Current_Status_Executive_Report.pptx")
 
-        # Upload all to Drive
-        files_to_send = {
-            os.path.basename(hw_output): upload_to_drive(hw_output, folder_id),
-            os.path.basename(sw_output): upload_to_drive(sw_output, folder_id),
-            os.path.basename(docx_output): upload_to_drive(docx_output, folder_id),
-            os.path.basename(pptx_output): upload_to_drive(pptx_output, folder_id)
+        generate_docx(session_id, summary, recommendations, findings, docx_path)
+        generate_pptx(session_id, summary, recommendations, findings, pptx_path)
+
+        docx_url = upload_to_drive(docx_path, session_id)
+        pptx_url = upload_to_drive(pptx_path, session_id)
+
+        return {
+            "docx_url": docx_url,
+            "pptx_url": pptx_url
         }
 
-        # Send to GPT3
-        payload = {"session_id": session_id, "email": email}
-        for i, (name, url) in enumerate(files_to_send.items(), start=1):
-            payload[f"file_{i}_name"] = name
-            payload[f"file_{i}_url"] = url
-
-        response = requests.post(NEXT_API_URL, json=payload)
-        print(f"➡️ GPT3 triggered: {response.status_code} - {response.text}")
-
     except Exception as e:
-        print(f"💥 Unhandled error: {e}")
+        print(f"❌ Error in generate_assessment_report: {e}")
         traceback.print_exc()
+        return {
+            "docx_url": None,
+            "pptx_url": None,
+            "error": str(e)
+        }
