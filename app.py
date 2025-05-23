@@ -43,6 +43,18 @@ else:
 def health_check():
     return "✅ IT Assessment API is running", 200
 
+from generate_assessment import generate_assessment_report
+
+@app.route("/generate_assessment", methods=["POST"])
+def generate_assessment():
+    try:
+        data = request.get_json(force=True)
+        result = generate_assessment_report(data)
+        return jsonify(result), 200
+    except Exception as e:
+        logging.exception("❌ Failed to generate assessment")
+        return jsonify({"error": str(e)}), 500
+
 # === POST /start_assessment ===
 @app.route("/start_assessment", methods=["POST"])
 def start_assessment():
