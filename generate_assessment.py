@@ -3,7 +3,8 @@ import json
 import traceback
 from docx import Document
 from pptx import Presentation
-from pptx.util import Inches
+from pptx.util import Inches, Pt
+from pptx.enum.shapes import MSO_SHAPE
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
@@ -70,43 +71,65 @@ def upload_to_drive(file_path, session_id):
         traceback.print_exc()
         return None
 
-# === Generate Word Report ===
+# === Generate Word Report with Extended Pages ===
 def generate_docx(session_id, summary, recommendations, findings, output_path):
     try:
         doc = Document()
-        doc.add_heading("IT Assessment Report", level=1)
+        doc.add_heading("IT Infrastructure Assessment Report", level=1)
         doc.add_paragraph(f"Session ID: {session_id}")
-        doc.add_paragraph("Score Summary:")
-        doc.add_paragraph(summary)
-        doc.add_paragraph("Key Findings:")
-        doc.add_paragraph(findings)
-        doc.add_paragraph("Recommendations:")
-        doc.add_paragraph(recommendations)
+
+        sections = [
+            ("Executive Summary", summary),
+            ("Infrastructure Overview", "Details on current infrastructure assets, layout, and topology."),
+            ("Score Summary", summary),
+            ("Key Findings", findings),
+            ("Recommendations", recommendations),
+            ("Security Gaps", "Analysis of identified security vulnerabilities and risks."),
+            ("Compliance Overview", "How current systems align with compliance standards."),
+            ("Technology Stack Gaps", "Mismatches or obsolescence in current technology stack."),
+            ("Cloud Readiness", "Assessment of current systems for migration to cloud environments."),
+            ("Future-State Architecture", "Suggestions for upgraded and modernized IT architecture."),
+            ("Cost-Saving Opportunities", "Identified areas where cost optimization is possible."),
+            ("Operational Risks", "Assessment of operational continuity and failover mechanisms."),
+            ("Vendor and Platform Evaluation", "Gaps in platform support and vendor lock-in risks."),
+            ("Asset Obsolescence Report", "Lists outdated or unsupported hardware/software."),
+            ("Conclusion", "Summary of transformation potential and next steps.")
+        ]
+
+        for title, content in sections:
+            doc.add_heading(title, level=2)
+            doc.add_paragraph(content)
+
         doc.save(output_path)
         print(f"📝 DOCX created: {output_path}")
     except Exception as e:
         print(f"❌ DOCX generation failed: {e}")
         traceback.print_exc()
 
-# === Generate PowerPoint Summary ===
+# === Generate PPTX with Dynamic Content ===
 def generate_pptx(session_id, summary, recommendations, findings, output_path):
     try:
         ppt = Presentation()
-        slide1 = ppt.slides.add_slide(ppt.slide_layouts[0])
-        slide1.shapes.title.text = "IT Infrastructure Executive Summary"
-        slide1.placeholders[1].text = f"Session ID: {session_id}"
+        layouts = ppt.slide_layouts
 
-        slide2 = ppt.slides.add_slide(ppt.slide_layouts[1])
-        slide2.shapes.title.text = "Score Summary"
-        slide2.placeholders[1].text = summary
+        slides = [
+            ("IT Executive Summary", f"Session ID: {session_id}"),
+            ("Score Summary", summary),
+            ("Key Findings", findings),
+            ("Recommendations", recommendations),
+            ("Security Gaps", "Key security vulnerabilities identified."),
+            ("Compliance Risks", "Gaps in regulatory and compliance coverage."),
+            ("Cloud Readiness", "Suitability of systems for cloud adoption."),
+            ("Obsolete Systems", "List of legacy systems needing upgrade."),
+            ("Future-State Overview", "Target architecture and capabilities."),
+            ("Transformation Timeline", "Phase-wise breakdown (insert Gantt)"),
+            ("Budget Highlights", "High-level cost vs. benefit insights.")
+        ]
 
-        slide3 = ppt.slides.add_slide(ppt.slide_layouts[1])
-        slide3.shapes.title.text = "Key Findings"
-        slide3.placeholders[1].text = findings
-
-        slide4 = ppt.slides.add_slide(ppt.slide_layouts[1])
-        slide4.shapes.title.text = "Recommendations"
-        slide4.placeholders[1].text = recommendations
+        for title, content in slides:
+            slide = ppt.slides.add_slide(layouts[1])
+            slide.shapes.title.text = title
+            slide.placeholders[1].text = content
 
         ppt.save(output_path)
         print(f"📊 PPTX created: {output_path}")
@@ -114,7 +137,7 @@ def generate_pptx(session_id, summary, recommendations, findings, output_path):
         print(f"❌ PPTX generation failed: {e}")
         traceback.print_exc()
 
-# === Primary Entry Point ===
+# === Entry Point: Called via API ===
 def generate_assessment_report(data):
     try:
         session_id = data["session_id"]
