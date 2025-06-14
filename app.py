@@ -12,26 +12,26 @@ def serve_generated_file(session_id, filename):
 
 # Main generation endpoint
 @app.route("/generate_assessment", methods=["POST"])
-def generate_assessment():
+def generate_assessment_endpoint():
     try:
         data = request.get_json(force=True)
-        session_id     = data["session_id"]
-        score_summary  = data["score_summary"]
-        recommendations= data["recommendations"]
-        key_findings   = data["key_findings"]
+        session_id      = data["session_id"]
+        score_summary   = data["score_summary"]
+        recommendations = data["recommendations"]
+        key_findings    = data["key_findings"]
+        chart_paths     = data.get("chart_paths", {})
 
-        # Generate the docs
+        # Generate the docs, now including charts
         result = generate_assessment_docs(
             session_id,
             score_summary,
             recommendations,
-            key_findings
+            key_findings,
+            chart_paths
         )
 
         # Prefix URLs with this service's base URL
-        base_url = os.getenv("DOCX_SERVICE_URL",
-                             f"{request.scheme}://{request.host}")
-        # strip any leading slash so we don't get double-slashes
+        base_url = os.getenv("DOCX_SERVICE_URL", f"{request.scheme}://{request.host}")
         result["docx_url"] = f"{base_url}{result['docx_url']}"
         result["pptx_url"] = f"{base_url}{result['pptx_url']}"
 
