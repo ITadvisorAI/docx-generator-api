@@ -4,24 +4,23 @@ from generate_assessment import generate_assessment_docs
 
 app = Flask(__name__)
 
-# Directory where generated reports are stored
-temp_dir = os.path.join(os.getcwd(), 'temp_sessions')
-
-@app.route('/files/<session_id>/<path:filename>')
+# Serve generated DOCX/PPTX files
+@app.route("/files/<session_id>/<path:filename>")
 def serve_generated_file(session_id, filename):
-    """Serve generated report files."""
-    directory = os.path.join(temp_dir, session_id)
+    directory = os.path.join("temp_sessions", session_id)
     return send_from_directory(directory, filename)
 
+# Main generation endpoint
 @app.route("/generate_assessment", methods=["POST"])
 def generate_assessment():
     try:
-        data = request.get_json()
-        session_id = data.get("session_id")
-        score_summary = data.get("score_summary")
-        recommendations = data.get("recommendations")
-        key_findings = data.get("key_findings")
+        data = request.get_json(force=True)
+        session_id     = data["session_id"]
+        score_summary  = data["score_summary"]
+        recommendations= data["recommendations"]
+        key_findings   = data["key_findings"]
 
+        # Generate the docs
         result = generate_assessment_docs(
             session_id,
             score_summary,
@@ -30,19 +29,21 @@ def generate_assessment():
         )
 
         # Prefix URLs with this service's base URL
-        base_url = os.getenv("DOCX_SERVICE_URL", "https://docx-generator-api.onrender.com")
-        docx_path = result["docx_url"].lstrip('/')
-        pptx_path = result["pptx_url"].lstrip('/')
-        result["docx_url"] = f"{base_url}/files/{docx_path}"
-        result["pptx_url"] = f"{base_url}/files/{pptx_path}"
+        base_url = os.getenv("DOCX_SERVICE_URL",
+                             f"{request.scheme}://{request.host}")
+        # strip any leading slash so we don't get double-slashes
+        result["docx_url"] = f"{base_url}{result['docx_url']}"
+        result["pptx_url"] = f"{base_url}{result['pptx_url']}"
 
-        return jsonify(result)
+        return jsonify(result), 200
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# Health check
 @app.route("/", methods=["HEAD", "GET"])
 def health_check():
-    return "✅ docx-generator-api is live"
+    return "✅ docx-generator-api is live", 200
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10010))
