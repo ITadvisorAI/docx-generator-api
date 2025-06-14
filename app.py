@@ -13,6 +13,7 @@ def serve_generated_file(session_id, filename):
 # Main generation endpoint
 @app.route("/generate_assessment", methods=["POST"])
 def generate_assessment_endpoint():
+    print("[DEBUG] /generate_assessment called with payload:", request.get_json(), flush=True)
     try:
         data = request.get_json(force=True)
         session_id      = data["session_id"]
