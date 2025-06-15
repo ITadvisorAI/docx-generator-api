@@ -4,6 +4,10 @@ from generate_assessment import generate_assessment_docs
 
 app = Flask(__name__)
 
+@app.route("/health", methods=["GET"])
+def health_check():
+    return "OK", 200
+    
 # Serve generated DOCX/PPTX files
 @app.route("/files/<session_id>/<path:filename>")
 def serve_generated_file(session_id, filename):
