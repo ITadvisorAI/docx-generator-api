@@ -18,33 +18,13 @@ def serve_generated_file(session_id, filename):
 # Main generation endpoint
 @app.route("/generate_assessment", methods=["POST"])
 def generate_assessment_endpoint():
-    print("[DEBUG] /generate_assessment called with payload:", request.get_json(), flush=True)
+    payload = request.get_json(force=True)
+    print("[DEBUG] /generate_assessment called with payload:", payload, flush=True)
     try:
-        data = request.get_json(force=True)
-        session_id      = data["session_id"]
-        score_summary   = data["score_summary"]
-        recommendations = data["recommendations"]
-        key_findings    = data["key_findings"]
-        chart_paths     = data.get("chart_paths", {})
-
-        # Generate the docs, now including charts
-        result = generate_assessment_docs(
-            session_id,
-            score_summary,
-            recommendations,
-            key_findings,
-            chart_paths
-        )
-
-        # Prefix URLs with this service's base URL
-        base_url = os.getenv("DOCX_SERVICE_URL", f"{request.scheme}://{request.host}")
-        result["docx_url"] = f"{base_url}{result['docx_url']}"
-        result["pptx_url"] = f"{base_url}{result['pptx_url']}"
-
+        # Forward all incoming fields to generator
+        result = generate_assessment_docs(**payload)
         return jsonify(result), 200
-
     except Exception as e:
-        # Enhanced logging of any exception
         print("[ERROR] /generate_assessment threw exception:", str(e), flush=True)
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
