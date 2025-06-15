@@ -25,110 +25,99 @@ def _to_direct_drive_url(url: str) -> str:
 def generate_assessment_docs(*args, **kwargs) -> dict:
     """
     Generate a filled DOCX and PPTX based on templates, then upload to Drive.
-    Supports both old positional signature:
-      (session_id, score_summary, recommendations, key_findings, chart_paths)
-    and new keyword-driven payloads:
-      session_id, score_summary, recommendations, key_findings, chart_paths,
-      hw_gap_url, sw_gap_url, email
+    Supports both positional signature and keyword-driven payloads.
     """
-    # Build data dict from args or kwargs
+    # Merge args/kwargs into data dict
     data = dict(kwargs)
     if args:
-        data.setdefault("session_id", args[0] if len(args) > 0 else "")
-        data.setdefault("score_summary", args[1] if len(args) > 1 else "")
-        data.setdefault("recommendations", args[2] if len(args) > 2 else "")
-        data.setdefault("key_findings", args[3] if len(args) > 3 else "")
-        data.setdefault("chart_paths", args[4] if len(args) > 4 else {})
+        data.setdefault("session_id",      args[0] if len(args) > 0 else "")
+        data.setdefault("score_summary",    args[1] if len(args) > 1 else "")
+        data.setdefault("recommendations",  args[2] if len(args) > 2 else "")
+        data.setdefault("key_findings",     args[3] if len(args) > 3 else "")
+        data.setdefault("chart_paths",      args[4] if len(args) > 4 else {})
 
-    session_id = data.get("session_id", "")
-    score_summary = data.get("score_summary", "")
-    recommendations = data.get("recommendations", "")
-    key_findings = data.get("key_findings", "")
-    chart_paths = data.get("chart_paths", {})
-    hw_gap_url = data.get("hw_gap_url", "")
-    sw_gap_url = data.get("sw_gap_url", "")
-    email = data.get("email", "")
-
+    # Extract common fields
+    session_id     = data.get("session_id", "")
     print(f"[DEBUG] Entered generate_assessment_docs for session: {session_id}", flush=True)
 
     # Prepare output directory
     session_dir = os.path.join(OUTPUT_ROOT, session_id)
     os.makedirs(session_dir, exist_ok=True)
 
-    # Download and save chart images
+    # Download chart images
     local_charts = {}
-    for name, url in chart_paths.items():
+    for name, url in data.get("chart_paths", {}).items():
         try:
             dl_url = _to_direct_drive_url(url)
-            print(f"[DEBUG] Fetching chart '{name}' from {dl_url}", flush=True)
-            resp = requests.get(dl_url)
-            resp.raise_for_status()
+            resp = requests.get(dl_url); resp.raise_for_status()
             chart_path = os.path.join(session_dir, f"{name}.png")
             with open(chart_path, "wb") as f:
                 f.write(resp.content)
             local_charts[name] = chart_path
-            print(f"[DEBUG] Saved chart to: {chart_path}", flush=True)
+            print(f"[DEBUG] Saved chart {name} to {chart_path}", flush=True)
         except Exception as e:
             print(f"[ERROR] Failed to download chart '{name}': {e}", flush=True)
 
-    # Define placeholder replacements
-    placeholders = {
-        "{{ session_id }}": session_id,
-        "{{ email }}": email,
-        "{{ content_1 }}": score_summary,
-        "{{ content_2 }}": f"Hardware GAP details: {hw_gap_url}",
-        "{{ content_3 }}": f"Software GAP details: {sw_gap_url}",
-        "{{ content_16 }}": key_findings,
-        "{{ content_19 }}": recommendations,
-        # Populate slide placeholders in PPTX
-        "{{ slide_executive_summary }}": score_summary,
-        "{{ slide_hardware_analysis }}": f"Hardware GAP details: {hw_gap_url}",
-        "{{ slide_software_analysis }}": f"Software GAP details: {sw_gap_url}",
-        "{{ slide_business_impact_of_gaps }}": key_findings,
-        "{{ slide_remediation_recommendations }}": recommendations,
-    }
+    # Build placeholder mapping dynamically
+    placeholders = {}
+    # Core and URL fields
+    for field in ["session_id", "email", "goal", "score_summary", "recommendations", "key_findings", "hw_gap_url", "sw_gap_url"]:
+        if field in data:
+            placeholders[f"{{{{ {field} }}}}"] = str(data[field])
+    # Content sections 1-20
+    for i in range(1, 21):
+        placeholders[f"{{{{ content_{i} }}}}"] = str(data.get(f"content_{i}", ""))
+    # Appendices
+    placeholders["{{ appendix_classification_matrix }}"] = str(data.get("appendix_classification_matrix", ""))
+    placeholders["{{ appendix_data_sources }}"]        = str(data.get("appendix_data_sources", ""))
+    # Slide placeholders
+    slide_keys = [
+        'executive_summary','it_landscape_overview','hardware_analysis','software_analysis',
+        'tier_classification_summary','hardware_lifecycle_chart','software_licensing_review',
+        'security_vulnerability_heatmap','performance_&_uptime_trends','system_reliability_overview',
+        'scalability_insights','legacy_system_exposure','obsolete_platform_matrix',
+        'cloud_migration_targets','strategic_it_alignment','business_impact_of_gaps',
+        'cost_of_obsolescence','sustainability_&_green_it','remediation_recommendations',
+        'roadmap_&_next_steps'
+    ]
+    for key in slide_keys:
+        placeholders[f"{{{{ slide_{key} }}}}"] = str(data.get(f"slide_{key}", ""))
 
     # --------- DOCX Generation ---------
     doc = Document(TEMPLATE_DOCX)
-    # Replace placeholders in paragraphs
     for para in doc.paragraphs:
-        for key, val in placeholders.items():
-            if key in para.text:
-                para.text = para.text.replace(key, val)
-    # Replace in tables
+        for ph, val in placeholders.items():
+            if ph in para.text:
+                para.text = para.text.replace(ph, val)
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
-                for key, val in placeholders.items():
-                    if key in cell.text:
-                        cell.text = cell.text.replace(key, val)
-    # Add charts to DOCX
+                for ph, val in placeholders.items():
+                    if ph in cell.text:
+                        cell.text = cell.text.replace(ph, val)
     for chart_path in local_charts.values():
         doc.add_page_break()
         doc.add_picture(chart_path, width=Inches(6))
-    # Save DOCX
     docx_filename = f"IT_Current_Status_Assessment_Report_{session_id}.docx"
     docx_out = os.path.join(session_dir, docx_filename)
     doc.save(docx_out)
-    print(f"[DEBUG] Saved DOCX file to: {docx_out}", flush=True)
+    print(f"[DEBUG] Saved DOCX to: {docx_out}", flush=True)
 
     # --------- PPTX Generation ---------
     prs = Presentation(TEMPLATE_PPTX)
     for slide in prs.slides:
         for shape in slide.shapes:
             if hasattr(shape, 'text'):
-                for key, val in placeholders.items():
-                    if key in shape.text:
-                        shape.text = shape.text.replace(key, val)
-    # Append charts as new slides
+                for ph, val in placeholders.items():
+                    if ph in shape.text:
+                        shape.text = shape.text.replace(ph, val)
     for chart_path in local_charts.values():
-        slide = prs.slides.add_slide(prs.slide_layouts[5])
-        slide.shapes.add_picture(chart_path, Inches(1), Inches(1), width=Inches(8))
-    # Save PPTX
+        sl = prs.slides.add_slide(prs.slide_layouts[5])
+        sl.shapes.add_picture(chart_path, Inches(1), Inches(1), width=Inches(8))
     pptx_filename = f"IT_Current_Status_Executive_Report_{session_id}.pptx"
     pptx_out = os.path.join(session_dir, pptx_filename)
     prs.save(pptx_out)
-    print(f"[DEBUG] Saved PPTX file to: {pptx_out}", flush=True)
+    print(f"[DEBUG] Saved PPTX to: {pptx_out}", flush=True)
 
     # --------- Upload to Google Drive ---------
     docx_url = upload_to_drive(docx_out, docx_filename, session_id)
