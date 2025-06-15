@@ -4,6 +4,7 @@ import requests
 from docx import Document
 from pptx import Presentation
 from pptx.util import Inches
+from drive_utils import upload_to_drive  # <— added import
 
 TEMPLATE_DOCX = os.path.join("templates", "IT_Current_Status_Assessment_Report_Template.docx")
 TEMPLATE_PPTX = os.path.join("templates", "IT_Current_Status_Executive_Report_Template.pptx")
@@ -83,8 +84,15 @@ def generate_assessment_docs(session_id, summary, recommendations, findings, cha
     pptx.save(pptx_out)
     print(f"[DEBUG] Saved PPTX file to: {pptx_out}", flush=True)
 
-    # 7. Return URLs relative to the /files endpoint
+    # ——— Upload newly-created files to the session’s Drive folder ———
+    docx_drive_url = upload_to_drive(docx_out, os.path.basename(docx_out), session_id)
+    print(f"[DEBUG] Uploaded DOCX file to Drive: {docx_drive_url}", flush=True)
+
+    pptx_drive_url = upload_to_drive(pptx_out, os.path.basename(pptx_out), session_id)
+    print(f"[DEBUG] Uploaded PPTX file to Drive: {pptx_drive_url}", flush=True)
+
+    # 7. Return direct Drive URLs
     return {
-        "docx_url": f"/files/{session_id}/{os.path.basename(docx_out)}",
-        "pptx_url": f"/files/{session_id}/{os.path.basename(pptx_out)}"
+        "docx_url": docx_drive_url,
+        "pptx_url": pptx_drive_url
     }
