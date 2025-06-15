@@ -1,13 +1,26 @@
+# generate_assessment.py
 import os
+import re
 import requests
 from docx import Document
 from pptx import Presentation
 from pptx.util import Inches
 
-# Template paths
 TEMPLATE_DOCX = os.path.join("templates", "IT_Current_Status_Assessment_Report_Template.docx")
 TEMPLATE_PPTX = os.path.join("templates", "IT_Current_Status_Executive_Report_Template.pptx")
 OUTPUT_DIR = "temp_sessions"
+
+def _to_direct_drive_url(url: str) -> str:
+    """
+    If this is a Google Drive "view" URL, convert it to
+    a direct-download URL (uc?export=download&id=FILE_ID).
+    Otherwise return the URL unchanged.
+    """
+    m = re.search(r"/d/([a-zA-Z0-9_-]+)", url)
+    if m:
+        file_id = m.group(1)
+        return f"https://drive.google.com/uc?export=download&id={file_id}"
+    return url
 
 def fill_docx_template(doc: Document, replacements: dict):
     for para in doc.paragraphs:
@@ -30,14 +43,14 @@ def fill_pptx_template(prs: Presentation, replacements: dict):
                         shape.text = shape.text.replace(key, val)
 
 def generate_assessment_docs(session_id, summary, recommendations, findings, chart_paths):
-    # Prepare output folder
     out_dir = os.path.join(OUTPUT_DIR, session_id)
     os.makedirs(out_dir, exist_ok=True)
 
-    # 1. Download chart images
+    # 1. Download chart images (now using direct-download URLs)
     local_charts = {}
     for name, url in chart_paths.items():
-        resp = requests.get(url)
+        dl_url = _to_direct_drive_url(url)
+        resp = requests.get(dl_url)
         resp.raise_for_status()
         local_path = os.path.join(out_dir, f"{name}.png")
         with open(local_path, "wb") as f:
