@@ -1,13 +1,14 @@
 import os
+import traceback
 from flask import Flask, request, jsonify, send_from_directory
 from generate_assessment import generate_assessment_docs
 
 app = Flask(__name__)
 
 @app.route("/health", methods=["GET"])
-def health_check():
+def health_check_simple():
     return "OK", 200
-    
+
 # Serve generated DOCX/PPTX files
 @app.route("/files/<session_id>/<path:filename>")
 def serve_generated_file(session_id, filename):
@@ -43,11 +44,14 @@ def generate_assessment_endpoint():
         return jsonify(result), 200
 
     except Exception as e:
+        # Enhanced logging of any exception
+        print("[ERROR] /generate_assessment threw exception:", str(e), flush=True)
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
-# Health check
+# Health check at root
 @app.route("/", methods=["HEAD", "GET"])
-def health_check():
+def health_check_root():
     return "✅ docx-generator-api is live", 200
 
 if __name__ == "__main__":
