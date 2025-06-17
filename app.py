@@ -5,6 +5,11 @@ from generate_assessment import generate_assessment_docs
 
 app = Flask(__name__)
 
+@app.route("/healthz", methods=["GET"])
+def health_check():
+    """Simple keep-alive endpoint."""
+    return "OK", 200
+
 @app.route("/health", methods=["GET"])
 def health_check_simple():
     return "OK", 200
