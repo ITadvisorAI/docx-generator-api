@@ -6,22 +6,40 @@ from pptx import Presentation
 from pptx.util import Inches
 from drive_utils import upload_to_drive
 
-# Section titles for Table of Contents
+# Section titles for Table of Contents (20 sections as per template)
 SECTION_TITLES = [
-    "Score Summary", "IT Landscape Overview", "Risk Assessment",
-    "Recommendations", "Key Findings", "Distribution by Category",
-    "Trend Analysis", "Action Items"
+    "Executive Summary",
+    "Organization IT Landscape Overview",
+    "Inventory Breakdown – Hardware",
+    "Inventory Breakdown – Software",
+    "Classification Tier Distribution",
+    "Hardware Lifecycle Status",
+    "Software Licensing and Compliance",
+    "Security Posture and Vulnerabilities",
+    "Performance Bottlenecks & Uptime Metrics",
+    "System Reliability & Failover Readiness",
+    "Scalability & Elasticity Opportunities",
+    "Legacy Systems and Technical Debt",
+    "Obsolete and High-Risk Platforms",
+    "Cloud Migration Potential (Workload Mapping)",
+    "Strategic Alignment of IT Assets",
+    "Business Impact Analysis of Current Gaps",
+    "Financial Implications – Cost of Obsolescence",
+    "Environmental Impact and Sustainability",
+    "Recommendations for Remediation & Upgrade",
+    "Proposed Next Steps and Roadmap"
 ]
 
 def build_table_of_contents(data: dict) -> str:
     """
-    Generate a simple Table of Contents based on which content_n entries are present.
+    Generate a complete Table of Contents for all sections.
     """
     lines = []
     for idx, title in enumerate(SECTION_TITLES, start=1):
-        if data.get(f"content_{idx}"):
-            lines.append(f"{idx}. {title}")
-    return "\n".join(lines)
+        # always include every section number and title
+        lines.append(f"{idx}. {title}")
+    return "
+".join(lines)
 
 # Base paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -32,20 +50,9 @@ OUTPUT_ROOT = os.path.join(BASE_DIR, "temp_sessions")
 
 def _to_direct_drive_url(url: str) -> str:
     # convert Google Drive share URL to direct download URL
-
-    # 1) handle URLs with ?id=… or &id=…
-    match = re.search(r"[?&]id=([\w\-]+)", url)
+    match = re.search(r"id=([\w-]+)", url)
     if match:
-        file_id = match.group(1)
-        return f"https://drive.google.com/uc?export=download&id={file_id}"
-
-    # 2) handle URLs in the /d/<ID>/ format
-    match = re.search(r"/d/([\w\-]+)", url)
-    if match:
-        file_id = match.group(1)
-        return f"https://drive.google.com/uc?export=download&id={file_id}"
-
-    # Fallback: return the original URL unchanged
+        return f"https://drive.google.com/uc?export=download&id={match.group(1)}"
     return url
 
 
@@ -64,6 +71,36 @@ def generate_assessment_docs(**data):
     session_id = data.get("session_id", "")
     report_date = data.get("report_date", "")
     print(f"[DEBUG] Generating docs for session: {session_id}", flush=True)
+
+    # Map section titles for template placeholders
+    for idx, title in enumerate(SECTION_TITLES, start=1):
+        data[f"section_{idx}_title"] = title
+
+    # Map slide placeholders to narratives content
+    section_to_slide_map = {
+        'executive_summary': 1,
+        'it_landscape_overview': 2,
+        'hardware_analysis': 3,
+        'software_analysis': 4,
+        'tier_classification_summary': 5,
+        'hardware_lifecycle_chart': 6,
+        'software_licensing_review': 7,
+        'security_vulnerability_heatmap': 8,
+        'performance_&_uptime_trends': 9,
+        'system_reliability_overview': 10,
+        'scalability_insights': 11,
+        'legacy_system_exposure': 12,
+        'obsolete_platform_matrix': 13,
+        'cloud_migration_targets': 14,
+        'strategic_it_alignment': 15,
+        'business_impact_of_gaps': 16,
+        'cost_of_obsolescence': 17,
+        'environmental_impact_and_sustainability': 18,
+        'remediation_recommendations': 19,
+        'roadmap_&_next_steps': 20
+    }
+    for key, sec_num in section_to_slide_map.items():
+        data[f"slide_{key}"] = data.get(f"content_{sec_num}", "")
 
     # Prepare output directory
     session_dir = os.path.join(OUTPUT_ROOT, session_id)
