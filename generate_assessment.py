@@ -65,15 +65,17 @@ def generate_assessment_docs(**data):
 
     # Slide placeholders
     slide_keys = [
-        'executive_summary', 'it_landscape_overview', 'risk_assessment',
-        'hardware_inventory_analysis', 'software_inventory_analysis', 'recommendations',
-        'key_findings', 'distribution_charts', 'trend_analysis', 'action_plan',
-        'security_vulnerability_heatmap','performance_&_uptime_trends','system_reliability_overview',
-        'scalability_insights','legacy_system_exposure','obsolete_platform_matrix',
-        'cloud_migration_targets','strategic_it_alignment','business_impact_of_gaps',
-        'cost_of_obsolescence','sustainability_&_green_it','remediation_recommendations',
-        'roadmap_&_next_steps'
-    ]
+    'executive_summary', 'it_landscape_overview',
+    'hardware_analysis', 'software_analysis', 'tier_classification_summary',
+    'hardware_lifecycle_chart', 'software_licensing_review',
+    'security_vulnerability_heatmap', 'performance_&_uptime_trends',
+    'system_reliability_overview', 'scalability_insights',
+    'legacy_system_exposure', 'obsolete_platform_matrix',
+    'cloud_migration_targets', 'strategic_it_alignment',
+    'business_impact_of_gaps', 'cost_of_obsolescence',
+    'sustainability_&_green_it', 'remediation_recommendations',
+    'roadmap_&_next_steps'
+]
     for key in slide_keys:
         placeholders[f"{{{{ slide_{key} }}}}"] = str(data.get(f"slide_{key}", ""))
 
