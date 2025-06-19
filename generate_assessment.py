@@ -14,30 +14,25 @@ OUTPUT_ROOT = os.path.join(BASE_DIR, "temp_sessions")
 
 
 def _to_direct_drive_url(url: str) -> str:
-    """Convert a Drive view link to a direct download URL."""
-    match = re.search(r"/d/([A-Za-z0-9_-]+)", url)
+    # convert Google Drive share URL to direct download URL
+    match = re.search(r"id=([\w-]+)", url)
     if match:
-        file_id = match.group(1)
-        return f"https://drive.google.com/uc?export=download&id={file_id}"
+        return f"https://drive.google.com/uc?export=download&id={match.group(1)}"
     return url
 
 
-def generate_assessment_docs(*args, **kwargs) -> dict:
-    """
-    Generate a filled DOCX and PPTX based on templates, then upload to Drive.
-    Supports both positional signature and keyword-driven payloads.
-    """
-    # Merge args/kwargs into data dict
-    data = dict(kwargs)
-    if args:
-        data.setdefault("session_id",      args[0] if len(args) > 0 else "")
-        data.setdefault("score_summary",    args[1] if len(args) > 1 else "")
-        data.setdefault("recommendations",  args[2] if len(args) > 2 else "")
-        data.setdefault("key_findings",     args[3] if len(args) > 3 else "")
-        data.setdefault("chart_paths",      args[4] if len(args) > 4 else {})
+def generate_assessment_docs(**data):
+    # —— Align incoming keys to template expectations ——
+    # Map asset analysis sheet links to template variables
+    data["hw_gap_url"] = data.get("file_1_drive_url", "")
+    data["sw_gap_url"] = data.get("file_2_drive_url", "")
+    # Consolidate any top‑level chart URLs into a single chart_paths dict
+    if "chart_paths" not in data:
+        data["chart_paths"] = { key: url for key, url in data.items() if key.endswith("_chart") }
 
     # Extract common fields
-    session_id     = data.get("session_id", "")
+    # Extract common fields
+    session_id = data.get("session_id", "")
     print(f"[DEBUG] Entered generate_assessment_docs for session: {session_id}", flush=True)
 
     # Prepare output directory
@@ -61,19 +56,18 @@ def generate_assessment_docs(*args, **kwargs) -> dict:
     # Build placeholder mapping dynamically
     placeholders = {}
     # Core and URL fields
-    for field in ["session_id", "email", "goal", "score_summary", "recommendations", "key_findings", "hw_gap_url", "sw_gap_url"]:
+    for field in ["session_id", "email", "goal", "score_summary", "overview", "recommendations", "key_findings", "hw_gap_url", "sw_gap_url"]:
         if field in data:
             placeholders[f"{{{{ {field} }}}}"] = str(data[field])
     # Content sections 1-20
     for i in range(1, 21):
-        placeholders[f"{{{{ content_{i} }}}}"] = str(data.get(f"content_{i}", ""))
-    # Appendices
-    placeholders["{{ appendix_classification_matrix }}"] = str(data.get("appendix_classification_matrix", ""))
-    placeholders["{{ appendix_data_sources }}"]        = str(data.get("appendix_data_sources", ""))
+        placeholders[f"{{{{ content_{i} }}}}"] = data.get(f"content_{i}", "")
+
     # Slide placeholders
     slide_keys = [
-        'executive_summary','it_landscape_overview','hardware_analysis','software_analysis',
-        'tier_classification_summary','hardware_lifecycle_chart','software_licensing_review',
+        'executive_summary', 'it_landscape_overview', 'risk_assessment',
+        'hardware_inventory_analysis', 'software_inventory_analysis', 'recommendations',
+        'key_findings', 'distribution_charts', 'trend_analysis', 'action_plan',
         'security_vulnerability_heatmap','performance_&_uptime_trends','system_reliability_overview',
         'scalability_insights','legacy_system_exposure','obsolete_platform_matrix',
         'cloud_migration_targets','strategic_it_alignment','business_impact_of_gaps',
@@ -107,15 +101,10 @@ def generate_assessment_docs(*args, **kwargs) -> dict:
     prs = Presentation(TEMPLATE_PPTX)
     for slide in prs.slides:
         for shape in slide.shapes:
-            if hasattr(shape, 'text'):
+            if hasattr(shape, "text"):
                 for ph, val in placeholders.items():
                     if ph in shape.text:
                         shape.text = shape.text.replace(ph, val)
-    for chart_path in local_charts.values():
-        sl = prs.slides.add_slide(prs.slide_layouts[5])
-        sl.shapes.add_picture(chart_path, Inches(1), Inches(1), width=Inches(8))
-    pptx_filename = f"IT_Current_Status_Executive_Report_{session_id}.pptx"
-    pptx_out = os.path.join(session_dir, pptx_filename)
     prs.save(pptx_out)
     print(f"[DEBUG] Saved PPTX to: {pptx_out}", flush=True)
 
