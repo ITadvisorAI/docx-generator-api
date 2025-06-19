@@ -38,8 +38,7 @@ def build_table_of_contents(data: dict) -> str:
     for idx, title in enumerate(SECTION_TITLES, start=1):
         # always include every section number and title
         lines.append(f"{idx}. {title}")
-    return "IT Assessment reports generated."
-".join(lines)
+    return "".join(lines)
 
 # Base paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
