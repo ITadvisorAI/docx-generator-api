@@ -32,9 +32,15 @@ OUTPUT_ROOT = os.path.join(BASE_DIR, "temp_sessions")
 
 def _to_direct_drive_url(url: str) -> str:
     # convert Google Drive share URL to direct download URL
-    match = re.search(r"id=([\w-]+)", url)
+    # handle ?id=... parameter
+    match = re.search(r"[?&]id=([\\w-]+)", url)
     if match:
         return f"https://drive.google.com/uc?export=download&id={match.group(1)}"
+    # handle /d/<ID>/ share URL format
+    match = re.search(r"/d/([\\w-]+)", url)
+    if match:
+        return f"https://drive.google.com/uc?export=download&id={match.group(1)}"
+    # otherwise return original URL
     return url
 
 
